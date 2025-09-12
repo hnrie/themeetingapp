@@ -1,0 +1,8 @@
+{
+  "name": "Gemini Meet",
+  "description": "A modern video conferencing application, similar to Google Meet, enhanced with a Gemini-powered AI assistant to generate meeting summaries and action items from transcripts.",
+  "requestFramePermissions": [
+    "camera",
+    "microphone"
+  ]
+}
