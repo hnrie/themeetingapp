@@ -2,13 +2,6 @@ import type { ChatMessage } from '../types';
 
 type EventCallback = (data: any) => void;
 
-// Simulcast configuration for sending multiple video quality layers.
-const SIMULCAST_ENCODINGS: RTCRtpEncodingParameters[] = [
-    { rid: 'l', maxBitrate: 200_000, scaleResolutionDownBy: 4.0 },
-    { rid: 'm', maxBitrate: 600_000, scaleResolutionDownBy: 2.0 },
-    { rid: 'h', maxBitrate: 2_500_000, scaleResolutionDownBy: 1.0 },
-];
-
 // A simple event emitter class
 class EventEmitter {
     private events: { [key: string]: EventCallback[] } = {};
@@ -81,10 +74,7 @@ export class MeetingManager extends EventEmitter {
                     this.createPeerConnection(from, name, true); // true = isInitiator
                     break;
                 case 'offer':
-                    // A peer receives an offer from another peer.
-                    if (!this.peers.has(from)) {
-                        this.emit('participant-joined', { id: from, name });
-                    }
+                    // A peer receives an offer. The participant should have been added via the join/welcome handshake.
                     const pc = this.createPeerConnection(from, name, false); // The receiver is never the initiator.
                     await pc.setRemoteDescription(new RTCSessionDescription(sdp));
                     const answer = await pc.createAnswer();
@@ -137,15 +127,7 @@ export class MeetingManager extends EventEmitter {
 
         if (this.localStream) {
             this.localStream.getTracks().forEach(track => {
-                if (track.kind === 'video') {
-                    pc.addTransceiver(track, {
-                        direction: 'sendrecv',
-                        streams: [this.localStream!],
-                        sendEncodings: SIMULCAST_ENCODINGS,
-                    });
-                } else {
-                    pc.addTrack(track, this.localStream!);
-                }
+                pc.addTrack(track, this.localStream!);
             });
         }
 

@@ -1,4 +1,3 @@
-
 import { useState, useCallback, useRef, useEffect } from 'react';
 import type { VideoQuality, DeviceInfo } from '../types';
 
@@ -233,7 +232,13 @@ export const useCamera = () => {
         try {
             const constraints = { [kind]: { deviceId: { exact: deviceId } } };
             const newMediaStream = await navigator.mediaDevices.getUserMedia(constraints);
-            const newTrack = newMediaStream.getTracks()[0];
+            const newTrack = kind === 'video' 
+                ? newMediaStream.getVideoTracks()[0] 
+                : newMediaStream.getAudioTracks()[0];
+
+            if (!newTrack) {
+                throw new Error(`No ${kind} track found in new stream.`);
+            }
 
             if (oldTrack) {
                 streamRef.current.removeTrack(oldTrack);

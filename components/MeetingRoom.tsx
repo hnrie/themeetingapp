@@ -40,10 +40,16 @@ const MeetingRoom: React.FC<MeetingRoomProps> = ({ meetingId, userName, onLeave 
     const setupManagerEvents = () => {
         manager.on('participant-joined', ({ id, name }) => {
             console.log('Participant joined:', name, id);
-            setParticipants(prev => [
-                ...prev, 
-                { id, name, isCameraOn: true, isMicOn: true, isSpeaking: false, isScreenSharing: false, stream: null }
-            ]);
+            setParticipants(prev => {
+                // Prevent adding duplicate participants
+                if (prev.some(p => p.id === id)) {
+                    return prev;
+                }
+                return [
+                    ...prev,
+                    { id, name, isCameraOn: true, isMicOn: true, isSpeaking: false, isScreenSharing: false, stream: null }
+                ];
+            });
         });
         
         manager.on('participant-left', ({ id }) => {
