@@ -29,3 +29,9 @@ export interface MeetingSummary {
 }
 
 export type VideoQuality = 'auto' | '360p' | '720p' | '1080p' | '4k';
+
+export interface DeviceInfo {
+  deviceId: string;
+  label: string;
+  kind: MediaDeviceKind;
+}

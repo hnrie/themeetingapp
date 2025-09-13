@@ -1,4 +1,3 @@
-
 import type { ChatMessage } from '../types';
 
 type EventCallback = (data: any) => void;
@@ -70,14 +69,23 @@ export class MeetingManager extends EventEmitter {
             
             switch (type) {
                 case 'join':
+                    // An existing peer receives 'join' from a new peer.
+                    // Add the new peer to the UI and send a 'welcome' signal back.
                     this.emit('participant-joined', { id: from, name });
-                    this.createPeerConnection(from, name, true);
+                    this.sendSignal('welcome', { from: this.myId, to: from, name: this.myName });
+                    break;
+                case 'welcome':
+                    // The new peer receives 'welcome' from an existing peer.
+                    // Add the existing peer to the UI and initiate the connection.
+                    this.emit('participant-joined', { id: from, name });
+                    this.createPeerConnection(from, name, true); // true = isInitiator
                     break;
                 case 'offer':
+                    // A peer receives an offer from another peer.
                     if (!this.peers.has(from)) {
                         this.emit('participant-joined', { id: from, name });
                     }
-                    const pc = this.createPeerConnection(from, name, false);
+                    const pc = this.createPeerConnection(from, name, false); // The receiver is never the initiator.
                     await pc.setRemoteDescription(new RTCSessionDescription(sdp));
                     const answer = await pc.createAnswer();
                     await pc.setLocalDescription(answer);

@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
-import type { Participant, ChatMessage, VideoQuality } from '../types';
+import type { Participant, ChatMessage, VideoQuality, DeviceInfo } from '../types';
 import { useCamera } from '../hooks/useCamera';
 import { MeetingManager } from '../services/webrtcService';
 import VideoTile from './VideoTile';
@@ -97,7 +97,7 @@ const MeetingRoom: React.FC<MeetingRoomProps> = ({ meetingId, userName, onLeave 
         isCameraOn: media.isCameraOn,
         isMicOn: media.isMicOn,
         stream: media.stream,
-        isSpeaking: false,
+        isSpeaking: media.isSpeaking,
         isScreenSharing: media.isScreenSharing,
     };
     setParticipants([localParticipant]);
@@ -107,11 +107,17 @@ const MeetingRoom: React.FC<MeetingRoomProps> = ({ meetingId, userName, onLeave 
         manager.leave();
         meetingManagerRef.current = null;
     };
-  }, [media.stream, meetingId, userName, media.isCameraOn, media.isMicOn, media.isScreenSharing]);
+  }, [media.stream, meetingId, userName]);
 
    useEffect(() => {
-    setParticipants(prev => prev.map(p => p.isLocal ? { ...p, isCameraOn: media.isCameraOn, isMicOn: media.isMicOn, stream: media.stream } : p));
-  }, [media.isCameraOn, media.isMicOn, media.stream]);
+    setParticipants(prev => prev.map(p => p.isLocal ? { 
+        ...p, 
+        isCameraOn: media.isCameraOn, 
+        isMicOn: media.isMicOn, 
+        isSpeaking: media.isSpeaking,
+        stream: media.stream 
+    } : p));
+  }, [media.isCameraOn, media.isMicOn, media.stream, media.isSpeaking]);
   
   const handleToggleCamera = () => {
       media.toggleCamera();
@@ -169,20 +175,25 @@ const MeetingRoom: React.FC<MeetingRoomProps> = ({ meetingId, userName, onLeave 
   };
 
   const handleQualityChange = async (newQuality: VideoQuality) => {
-    setIsSettingsOpen(false);
-    if (newQuality === media.videoQuality) {
-        return;
-    }
-    
     setNotification("Changing video quality..."); 
     await media.updateStreamQuality(newQuality);
 
-    // useCamera hook now sets its own error state, which can be used for notifications.
     if (media.error) {
         setNotification(media.error);
     } else {
         setNotification("Video quality updated.");
     }
+  };
+
+  const handleDeviceChange = async (kind: 'video' | 'audio', deviceId: string) => {
+      setNotification(`Switching ${kind} device...`);
+      const newTrack = await media.switchDevice(kind, deviceId);
+      if (newTrack && meetingManagerRef.current) {
+          meetingManagerRef.current.replaceTrack(newTrack);
+          setNotification(`${kind === 'video' ? 'Camera' : 'Microphone'} updated.`);
+      } else {
+          setNotification(`Failed to switch ${kind} device.`);
+      }
   };
 
   const localParticipant = participants.find(p => p.isLocal);
@@ -209,11 +220,9 @@ const MeetingRoom: React.FC<MeetingRoomProps> = ({ meetingId, userName, onLeave 
           <div className="w-full h-full max-w-7xl">
             {screenSharer ? (
               <div className="flex w-full h-full gap-4">
-                {/* Main area for the screen share */}
                 <div className="flex-1 h-full">
                   <VideoTile participant={screenSharer} />
                 </div>
-                {/* Filmstrip for other participants */}
                 {otherParticipants.length > 0 && (
                   <div className="w-48 flex-shrink-0 flex flex-col gap-4 overflow-y-auto">
                     {otherParticipants.map(p => (
@@ -252,6 +261,11 @@ const MeetingRoom: React.FC<MeetingRoomProps> = ({ meetingId, userName, onLeave 
             onClose={() => setIsSettingsOpen(false)}
             currentQuality={media.videoQuality}
             onQualityChange={handleQualityChange}
+            videoDevices={media.videoDevices}
+            audioDevices={media.audioDevices}
+            currentVideoDevice={media.selectedVideoDeviceId}
+            currentAudioDevice={media.selectedAudioDeviceId}
+            onDeviceChange={handleDeviceChange}
         />
 
         <Sidebar 
