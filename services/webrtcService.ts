@@ -3,6 +3,13 @@ import type { ChatMessage } from '../types';
 
 type EventCallback = (data: any) => void;
 
+// Simulcast configuration for sending multiple video quality layers.
+const SIMULCAST_ENCODINGS: RTCRtpEncodingParameters[] = [
+    { rid: 'l', maxBitrate: 200_000, scaleResolutionDownBy: 4.0 },
+    { rid: 'm', maxBitrate: 600_000, scaleResolutionDownBy: 2.0 },
+    { rid: 'h', maxBitrate: 2_500_000, scaleResolutionDownBy: 1.0 },
+];
+
 // A simple event emitter class
 class EventEmitter {
     private events: { [key: string]: EventCallback[] } = {};
@@ -25,9 +32,15 @@ export class MeetingManager extends EventEmitter {
     public myId: string;
     private meetingId: string;
     private peers: Map<string, { pc: RTCPeerConnection, name: string }> = new Map();
+    
     private channel: BroadcastChannel;
+
     private localStream: MediaStream | null = null;
     private myName: string = '';
+
+    private audioContext: AudioContext | null = null;
+    private analysers: Map<string, { intervalId: number }> = new Map();
+    private speakingThreshold = 5; // Sensitivity for speaking detection
 
     private configuration = {
         iceServers: [{ urls: 'stun:stun.l.google.com:19302' }]
@@ -37,20 +50,22 @@ export class MeetingManager extends EventEmitter {
         super();
         this.myId = `id-${Math.random().toString(36).substr(2, 9)}`;
         this.meetingId = meetingId;
-        this.channel = new BroadcastChannel(`gemini-meet-${this.meetingId}`);
+        
+        this.channel = new BroadcastChannel(this.meetingId);
         this.channel.onmessage = this.handleSignalingMessage.bind(this);
     }
 
     private sendSignal(type: string, payload: any) {
-        this.channel.postMessage(JSON.stringify({ type, payload }));
+        const message = { type, payload };
+        this.channel.postMessage(message);
     }
 
     private async handleSignalingMessage(event: MessageEvent) {
         try {
-            const { type, payload } = JSON.parse(event.data);
+            const { type, payload } = event.data;
             const { from, to, sdp, candidate, name } = payload;
 
-            // Ignore messages not intended for us or from ourselves
+            // Ignore messages from ourselves or those not intended for us
             if (from === this.myId || (to && to !== this.myId)) return;
             
             switch (type) {
@@ -59,7 +74,9 @@ export class MeetingManager extends EventEmitter {
                     this.createPeerConnection(from, name, true);
                     break;
                 case 'offer':
-                    this.emit('participant-joined', { id: from, name });
+                    if (!this.peers.has(from)) {
+                        this.emit('participant-joined', { id: from, name });
+                    }
                     const pc = this.createPeerConnection(from, name, false);
                     await pc.setRemoteDescription(new RTCSessionDescription(sdp));
                     const answer = await pc.createAnswer();
@@ -74,6 +91,15 @@ export class MeetingManager extends EventEmitter {
                     break;
                 case 'track-toggled':
                     this.emit('track-toggled', { id: from, kind: payload.kind, enabled: payload.enabled });
+                    break;
+                case 'screen-share-status':
+                    this.emit('screen-share-status', { id: from, isScreenSharing: payload.isScreenSharing });
+                    break;
+                case 'force-mute':
+                    this.emit('force-mute-triggered', {});
+                    break;
+                case 'request-unmute':
+                    this.emit('unmute-requested', {});
                     break;
                 case 'chat-message':
                      this.emit('chat-message', {
@@ -101,8 +127,19 @@ export class MeetingManager extends EventEmitter {
         const pc = new RTCPeerConnection(this.configuration);
         this.peers.set(remoteId, { pc, name: remoteName });
 
-        // Add local tracks to the new connection
-        this.localStream?.getTracks().forEach(track => pc.addTrack(track, this.localStream!));
+        if (this.localStream) {
+            this.localStream.getTracks().forEach(track => {
+                if (track.kind === 'video') {
+                    pc.addTransceiver(track, {
+                        direction: 'sendrecv',
+                        streams: [this.localStream!],
+                        sendEncodings: SIMULCAST_ENCODINGS,
+                    });
+                } else {
+                    pc.addTrack(track, this.localStream!);
+                }
+            });
+        }
 
         pc.onicecandidate = (event) => {
             if (event.candidate) {
@@ -112,10 +149,20 @@ export class MeetingManager extends EventEmitter {
 
         pc.ontrack = (event) => {
             this.emit('stream-added', { id: remoteId, stream: event.streams[0] });
+            if (event.track.kind === 'audio') {
+                this.monitorAudioLevel(remoteId, event.streams[0]);
+            }
         };
         
         pc.onconnectionstatechange = () => {
-            if (pc.connectionState === 'failed' || pc.connectionState === 'disconnected' || pc.connectionState === 'closed') {
+            if (pc.connectionState === 'failed' && isInitiator) {
+                console.warn(`Connection failed for peer ${remoteId}. Attempting ICE restart.`);
+                pc.createOffer({ iceRestart: true })
+                   .then(offer => pc.setLocalDescription(offer))
+                   .then(() => {
+                       this.sendSignal('offer', { from: this.myId, to: remoteId, name: this.myName, sdp: pc.localDescription });
+                   }).catch(e => console.error("ICE restart offer failed:", e));
+            } else if (pc.connectionState === 'disconnected' || pc.connectionState === 'closed') {
                 this.closePeerConnection(remoteId);
             }
         };
@@ -137,6 +184,43 @@ export class MeetingManager extends EventEmitter {
             peer.pc.close();
             this.peers.delete(remoteId);
             this.emit('participant-left', { id: remoteId });
+            if (this.analysers.has(remoteId)) {
+                clearInterval(this.analysers.get(remoteId)!.intervalId);
+                this.analysers.delete(remoteId);
+            }
+        }
+    }
+
+    private monitorAudioLevel(remoteId: string, stream: MediaStream) {
+        try {
+            if (!this.audioContext) this.audioContext = new AudioContext();
+            const source = this.audioContext.createMediaStreamSource(stream);
+            const analyser = this.audioContext.createAnalyser();
+            analyser.fftSize = 256;
+            const bufferLength = analyser.frequencyBinCount;
+            const dataArray = new Uint8Array(bufferLength);
+            source.connect(analyser);
+
+            let isSpeaking = false;
+            const intervalId = setInterval(() => {
+                analyser.getByteTimeDomainData(dataArray);
+                let sumSquares = 0.0;
+                for (const amplitude of dataArray) {
+                    const normalized = (amplitude / 128.0) - 1.0;
+                    sumSquares += normalized * normalized;
+                }
+                const rms = Math.sqrt(sumSquares / dataArray.length);
+
+                const currentlySpeaking = rms * 100 > this.speakingThreshold;
+                if (currentlySpeaking !== isSpeaking) {
+                    isSpeaking = currentlySpeaking;
+                    this.emit('speaking-status', { id: remoteId, isSpeaking });
+                }
+            }, 200);
+
+            this.analysers.set(remoteId, { intervalId });
+        } catch (error) {
+            console.error('Failed to monitor audio level:', error);
         }
     }
     
@@ -160,7 +244,36 @@ export class MeetingManager extends EventEmitter {
         });
         this.sendSignal('track-toggled', { from: this.myId, kind, enabled });
     }
+
+    public replaceTrack(track: MediaStreamTrack) {
+        const kind = track.kind;
+        this.peers.forEach(({ pc }) => {
+            const sender = pc.getSenders().find(s => s.track?.kind === kind);
+            if (sender) {
+                sender.replaceTrack(track);
+            }
+        });
+        if (kind === 'video') {
+            const localVideoTrack = this.localStream?.getVideoTracks()[0];
+            if (localVideoTrack) {
+                this.localStream?.removeTrack(localVideoTrack);
+            }
+            this.localStream?.addTrack(track);
+        }
+    }
     
+    public notifyScreenShareStatus(isScreenSharing: boolean) {
+        this.sendSignal('screen-share-status', { from: this.myId, isScreenSharing });
+    }
+
+    public muteParticipant(participantId: string) {
+        this.sendSignal('force-mute', { from: this.myId, to: participantId });
+    }
+    
+    public unmuteParticipant(participantId: string) {
+        this.sendSignal('request-unmute', { from: this.myId, to: participantId });
+    }
+
     public sendChatMessage(message: string) {
         const chatMessage: Partial<ChatMessage> = {
             id: `${this.myId}-${Date.now()}`,
@@ -168,7 +281,7 @@ export class MeetingManager extends EventEmitter {
             timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
             senderName: this.myName,
         };
-        this.emit('chat-message', { ...chatMessage, senderId: this.myId }); // Show own message immediately
+        this.emit('chat-message', { ...chatMessage, senderId: this.myId });
         this.sendSignal('chat-message', { ...chatMessage, from: this.myId });
     }
 }

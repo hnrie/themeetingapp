@@ -1,11 +1,26 @@
+
 import { useState, useCallback, useRef, useEffect } from 'react';
+import type { VideoQuality } from '../types';
+
+const qualityToConstraints: Record<VideoQuality, MediaStreamConstraints> = {
+    'auto': { video: true },
+    '360p': { video: { height: { ideal: 360 } } },
+    '720p': { video: { height: { ideal: 720 } } },
+    '1080p': { video: { height: { ideal: 1080 } } },
+    '4k': { video: { height: { ideal: 2160 } } },
+};
 
 export const useCamera = () => {
     const [stream, setStream] = useState<MediaStream | null>(null);
     const [isCameraOn, setIsCameraOn] = useState(false);
     const [isMicOn, setIsMicOn] = useState(false);
+    const [isScreenSharing, setIsScreenSharing] = useState(false);
+    const [videoQuality, setVideoQuality] = useState<VideoQuality>('auto');
     const [error, setError] = useState<string | null>(null);
+
     const streamRef = useRef<MediaStream | null>(null);
+    const cameraStreamRef = useRef<MediaStream | null>(null);
+    const screenStreamRef = useRef<MediaStream | null>(null);
 
     const startStream = useCallback(async () => {
         setError(null);
@@ -19,17 +34,20 @@ export const useCamera = () => {
                 return;
             }
 
-            const constraints = {
-                video: hasVideo,
+            const initialQuality = 'auto';
+            const constraints: MediaStreamConstraints = {
+                video: hasVideo ? qualityToConstraints[initialQuality].video : false,
                 audio: hasAudio,
             };
 
             const mediaStream = await navigator.mediaDevices.getUserMedia(constraints);
             
             streamRef.current = mediaStream;
+            cameraStreamRef.current = mediaStream; // Keep a reference to the original camera stream
             setStream(mediaStream);
             setIsCameraOn(hasVideo && mediaStream.getVideoTracks().length > 0 && mediaStream.getVideoTracks()[0].enabled);
             setIsMicOn(hasAudio && mediaStream.getAudioTracks().length > 0 && mediaStream.getAudioTracks()[0].enabled);
+            setVideoQuality(initialQuality);
 
         } catch (err) {
             console.error('Error accessing media devices.', err);
@@ -52,20 +70,29 @@ export const useCamera = () => {
             streamRef.current.getTracks().forEach(track => track.stop());
             setStream(null);
             streamRef.current = null;
-            setIsCameraOn(false);
-            setIsMicOn(false);
         }
+        if (cameraStreamRef.current) {
+            cameraStreamRef.current.getTracks().forEach(track => track.stop());
+            cameraStreamRef.current = null;
+        }
+         if (screenStreamRef.current) {
+            screenStreamRef.current.getTracks().forEach(track => track.stop());
+            screenStreamRef.current = null;
+        }
+        setIsCameraOn(false);
+        setIsMicOn(false);
+        setIsScreenSharing(false);
     }, []);
 
     const toggleCamera = useCallback(() => {
-        if (streamRef.current) {
-            const videoTrack = streamRef.current.getVideoTracks()[0];
+        if (cameraStreamRef.current && !isScreenSharing) {
+            const videoTrack = cameraStreamRef.current.getVideoTracks()[0];
             if (videoTrack) {
                 videoTrack.enabled = !videoTrack.enabled;
                 setIsCameraOn(videoTrack.enabled);
             }
         }
-    }, []);
+    }, [isScreenSharing]);
 
     const toggleMic = useCallback(() => {
         if (streamRef.current) {
@@ -76,8 +103,71 @@ export const useCamera = () => {
             }
         }
     }, []);
+
+    const startScreenShare = useCallback(async (onStop: () => void): Promise<MediaStreamTrack | null> => {
+        if (isScreenSharing) return null;
+        try {
+            const screenMedia = await navigator.mediaDevices.getDisplayMedia({ video: true });
+            const screenTrack = screenMedia.getVideoTracks()[0];
+            if (!screenTrack) return null;
+
+            screenStreamRef.current = screenMedia;
+            setIsScreenSharing(true);
+            setIsCameraOn(false); // Camera is not "on" while sharing
+
+            screenTrack.onended = onStop;
+            
+            return screenTrack;
+        } catch (err) {
+            console.error("Screen share error:", err);
+            return null;
+        }
+    }, [isScreenSharing]);
+
+    const stopScreenShare = useCallback((): MediaStreamTrack | null => {
+        if (!isScreenSharing || !cameraStreamRef.current) return null;
+        
+        screenStreamRef.current?.getTracks().forEach(track => track.stop());
+        screenStreamRef.current = null;
+        setIsScreenSharing(false);
+        setIsCameraOn(true);
+        
+        return cameraStreamRef.current.getVideoTracks()[0];
+    }, [isScreenSharing]);
     
-    // Cleanup on unmount
+    const updateStreamQuality = useCallback(async (newQuality: VideoQuality): Promise<void> => {
+        setError(null);
+        if (!cameraStreamRef.current || isScreenSharing) {
+            const message = 'Cannot change quality while screen sharing.';
+            console.warn(message);
+            setError(message);
+            return;
+        }
+
+        const videoTrack = cameraStreamRef.current.getVideoTracks()[0];
+        if (!videoTrack) {
+            const message = 'No active video track to update.';
+            console.warn(message);
+            setError(message);
+            return;
+        }
+
+        try {
+            const constraints = qualityToConstraints[newQuality];
+            if (typeof constraints.video === 'object') {
+                await videoTrack.applyConstraints(constraints.video);
+                setVideoQuality(newQuality);
+            } else if (constraints.video === true) {
+                // For 'auto', we can't apply `true`. We can just clear constraints by applying an empty object.
+                await videoTrack.applyConstraints({});
+                setVideoQuality('auto');
+            }
+        } catch (err) {
+            console.error('Error applying constraints', err);
+            setError('Failed to change video quality. Your camera might not support this resolution.');
+        }
+    }, [isScreenSharing]);
+
     useEffect(() => {
         return () => {
             stopStream();
@@ -93,5 +183,10 @@ export const useCamera = () => {
         toggleCamera,
         toggleMic,
         error,
+        isScreenSharing,
+        startScreenShare,
+        stopScreenShare,
+        videoQuality,
+        updateStreamQuality,
     };
 };

@@ -6,6 +6,8 @@ export interface Participant {
   isCameraOn: boolean;
   isMicOn: boolean;
   stream: MediaStream | null;
+  isSpeaking?: boolean;
+  isScreenSharing?: boolean;
 }
 
 export interface ChatMessage {
@@ -25,3 +27,5 @@ export interface MeetingSummary {
         task: string;
     }[];
 }
+
+export type VideoQuality = 'auto' | '360p' | '720p' | '1080p' | '4k';

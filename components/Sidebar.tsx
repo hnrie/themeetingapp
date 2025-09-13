@@ -1,10 +1,9 @@
-
-
 import React, { useState } from 'react';
-import { ChatIcon, AssistantIcon } from './icons';
+import { ChatIcon, AssistantIcon, UsersIcon } from './icons';
 import ChatPanel from './ChatPanel';
 import AssistantPanel from './AssistantPanel';
-import type { ChatMessage } from '../types';
+import ParticipantsPanel from './ParticipantsPanel';
+import type { ChatMessage, Participant } from '../types';
 
 interface SidebarProps {
   isOpen: boolean;
@@ -12,11 +11,16 @@ interface SidebarProps {
   localParticipantId: string;
   messages: ChatMessage[];
   onSendMessage: (message: string) => void;
+  participants: Participant[];
+  isHost: boolean;
+  onMuteParticipant: (participantId: string) => void;
+  onUnmuteParticipant: (participantId: string) => void;
+  hostId: string | null;
 }
 
-type ActiveTab = 'chat' | 'assistant';
+type ActiveTab = 'chat' | 'assistant' | 'participants';
 
-const Sidebar: React.FC<SidebarProps> = ({ isOpen, localUserName, localParticipantId, messages, onSendMessage }) => {
+const Sidebar: React.FC<SidebarProps> = ({ isOpen, localUserName, localParticipantId, messages, onSendMessage, participants, isHost, onMuteParticipant, onUnmuteParticipant, hostId }) => {
   const [activeTab, setActiveTab] = useState<ActiveTab>('chat');
 
   const TabButton: React.FC<{
@@ -43,6 +47,9 @@ const Sidebar: React.FC<SidebarProps> = ({ isOpen, localUserName, localParticipa
             <TabButton tabName="chat">
               <ChatIcon size={18} /> Chat
             </TabButton>
+            <TabButton tabName="participants">
+                <UsersIcon size={18} /> Participants ({participants.length})
+            </TabButton>
             <TabButton tabName="assistant">
               <AssistantIcon size={18} /> Assistant
             </TabButton>
@@ -55,6 +62,16 @@ const Sidebar: React.FC<SidebarProps> = ({ isOpen, localUserName, localParticipa
                 messages={messages}
                 onSendMessage={onSendMessage}
             />
+          )}
+          {activeTab === 'participants' && (
+              <ParticipantsPanel
+                participants={participants}
+                localParticipantId={localParticipantId}
+                isHost={isHost}
+                onMuteParticipant={onMuteParticipant}
+                onUnmuteParticipant={onUnmuteParticipant}
+                hostId={hostId}
+              />
           )}
           {activeTab === 'assistant' && <AssistantPanel />}
         </div>
