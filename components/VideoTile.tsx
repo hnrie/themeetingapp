@@ -1,4 +1,3 @@
-
 import React, { useRef, useEffect } from 'react';
 import type { Participant } from '../types';
 import { MicrophoneOffIcon } from './icons';
@@ -22,7 +21,7 @@ const VideoTile: React.FC<VideoTileProps> = ({ participant }) => {
 
   return (
     <div className={`relative w-full h-full bg-zinc-800 rounded-lg overflow-hidden shadow-lg flex items-center justify-center transition-all duration-300
-      ${participant.isSpeaking ? 'ring-4 ring-brand-secondary' : 'ring-0 ring-transparent'}
+      ${participant.isSpeaking ? 'ring-4 ring-brand-secondary animate-pulse' : 'ring-0 ring-transparent'}
     `}>
       {showVideo ? (
         <video 

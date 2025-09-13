@@ -28,6 +28,7 @@ export class MeetingManager extends EventEmitter {
     private channel: BroadcastChannel;
 
     private localStream: MediaStream | null = null;
+    private currentVideoTrack: MediaStreamTrack | null = null;
     private myName: string = '';
 
     private audioContext: AudioContext | null = null;
@@ -62,20 +63,16 @@ export class MeetingManager extends EventEmitter {
             
             switch (type) {
                 case 'join':
-                    // An existing peer receives 'join' from a new peer.
-                    // Add the new peer to the UI and send a 'welcome' signal back.
+                    // Received by an existing peer from a new peer.
+                    // Announce the new peer and initiate the connection TO them.
                     this.emit('participant-joined', { id: from, name });
-                    this.sendSignal('welcome', { from: this.myId, to: from, name: this.myName });
-                    break;
-                case 'welcome':
-                    // The new peer receives 'welcome' from an existing peer.
-                    // Add the existing peer to the UI and initiate the connection.
-                    this.emit('participant-joined', { id: from, name });
-                    this.createPeerConnection(from, name, true); // true = isInitiator
+                    this.createPeerConnection(from, name, true); // Existing peer is the initiator
                     break;
                 case 'offer':
-                    // A peer receives an offer. The participant should have been added via the join/welcome handshake.
-                    const pc = this.createPeerConnection(from, name, false); // The receiver is never the initiator.
+                    // Received by a new peer from an existing peer.
+                    // Announce the existing peer and answer the offer.
+                    this.emit('participant-joined', { id: from, name });
+                    const pc = this.createPeerConnection(from, name, false); // New peer is the receiver
                     await pc.setRemoteDescription(new RTCSessionDescription(sdp));
                     const answer = await pc.createAnswer();
                     await pc.setLocalDescription(answer);
@@ -126,9 +123,14 @@ export class MeetingManager extends EventEmitter {
         this.peers.set(remoteId, { pc, name: remoteName });
 
         if (this.localStream) {
-            this.localStream.getTracks().forEach(track => {
+            // Add the audio track from the original source stream
+            this.localStream.getAudioTracks().forEach(track => {
                 pc.addTrack(track, this.localStream!);
             });
+            // Add the currently active video track (camera or screen share)
+            if (this.currentVideoTrack) {
+                pc.addTrack(this.currentVideoTrack, this.localStream);
+            }
         }
 
         pc.onicecandidate = (event) => {
@@ -216,6 +218,7 @@ export class MeetingManager extends EventEmitter {
     
     public join(stream: MediaStream, userName: string) {
         this.localStream = stream;
+        this.currentVideoTrack = stream.getVideoTracks()[0] || null;
         this.myName = userName;
         this.sendSignal('join', { from: this.myId, name: userName });
     }
@@ -227,28 +230,25 @@ export class MeetingManager extends EventEmitter {
     }
     
     public toggleTrack(kind: 'video' | 'audio', enabled: boolean) {
-        this.localStream?.getTracks().forEach(track => {
-            if (track.kind === kind) {
-                track.enabled = enabled;
-            }
-        });
         this.sendSignal('track-toggled', { from: this.myId, kind, enabled });
     }
 
-    public replaceTrack(track: MediaStreamTrack) {
+    public async replaceTrack(track: MediaStreamTrack): Promise<void> {
         const kind = track.kind;
-        this.peers.forEach(({ pc }) => {
+        const replacementPromises = Array.from(this.peers.values()).map(({ pc }) => {
             const sender = pc.getSenders().find(s => s.track?.kind === kind);
             if (sender) {
-                sender.replaceTrack(track);
+                return sender.replaceTrack(track).catch(err => {
+                    console.error(`Failed to replace track for peer:`, err);
+                });
             }
+            return Promise.resolve();
         });
+
+        await Promise.all(replacementPromises);
+
         if (kind === 'video') {
-            const localVideoTrack = this.localStream?.getVideoTracks()[0];
-            if (localVideoTrack) {
-                this.localStream?.removeTrack(localVideoTrack);
-            }
-            this.localStream?.addTrack(track);
+            this.currentVideoTrack = track;
         }
     }
     

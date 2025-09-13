@@ -140,13 +140,13 @@ const MeetingRoom: React.FC<MeetingRoomProps> = ({ meetingId, userName, onLeave 
       if (media.isScreenSharing) {
           const cameraTrack = media.stopScreenShare();
           if (cameraTrack && meetingManagerRef.current) {
-              meetingManagerRef.current.replaceTrack(cameraTrack);
+              await meetingManagerRef.current.replaceTrack(cameraTrack);
           }
           isSharing = false;
       } else {
           const screenTrack = await media.startScreenShare(() => handleToggleScreenShare());
           if (screenTrack && meetingManagerRef.current) {
-              meetingManagerRef.current.replaceTrack(screenTrack);
+              await meetingManagerRef.current.replaceTrack(screenTrack);
               isSharing = true;
           } else {
               setNotification("Screen share permission was denied.");
@@ -195,7 +195,7 @@ const MeetingRoom: React.FC<MeetingRoomProps> = ({ meetingId, userName, onLeave 
       setNotification(`Switching ${kind} device...`);
       const newTrack = await media.switchDevice(kind, deviceId);
       if (newTrack && meetingManagerRef.current) {
-          meetingManagerRef.current.replaceTrack(newTrack);
+          await meetingManagerRef.current.replaceTrack(newTrack);
           setNotification(`${kind === 'video' ? 'Camera' : 'Microphone'} updated.`);
       } else {
           setNotification(`Failed to switch ${kind} device.`);
