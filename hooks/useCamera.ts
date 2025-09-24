@@ -33,14 +33,26 @@ export const useCamera = () => {
             const devices = await navigator.mediaDevices.enumerateDevices();
             const videoDevs = devices.filter(d => d.kind === 'videoinput').map(d => ({ deviceId: d.deviceId, label: d.label, kind: d.kind }));
             const audioDevs = devices.filter(d => d.kind === 'audioinput').map(d => ({ deviceId: d.deviceId, label: d.label, kind: d.kind }));
+            
+            console.log('📹 Found video devices:', videoDevs);
+            console.log('🎤 Found audio devices:', audioDevs);
+            
             setVideoDevices(videoDevs);
             setAudioDevices(audioDevs);
-            if (!selectedVideoDeviceId && videoDevs.length > 0) setSelectedVideoDeviceId(videoDevs[0].deviceId);
-            if (!selectedAudioDeviceId && audioDevs.length > 0) setSelectedAudioDeviceId(audioDevs[0].deviceId);
+            
+            // Only set default devices if none are selected yet
+            if (!selectedVideoDeviceId && videoDevs.length > 0) {
+                console.log('🎯 Setting default video device:', videoDevs[0].deviceId);
+                setSelectedVideoDeviceId(videoDevs[0].deviceId);
+            }
+            if (!selectedAudioDeviceId && audioDevs.length > 0) {
+                console.log('🎯 Setting default audio device:', audioDevs[0].deviceId);
+                setSelectedAudioDeviceId(audioDevs[0].deviceId);
+            }
         } catch (err) {
-            console.error("Error enumerating devices:", err);
+            console.error("❌ Error enumerating devices:", err);
         }
-    }, [selectedAudioDeviceId, selectedVideoDeviceId]);
+    }, []);
 
     const startLocalAudioMonitor = useCallback(() => {
         if (!streamRef.current || audioMonitorRef.current) return;
@@ -83,43 +95,84 @@ export const useCamera = () => {
     const startStream = useCallback(async () => {
         setError(null);
         try {
-            const hasPermissions = (await navigator.mediaDevices.enumerateDevices()).some(d => d.label);
-            if (!hasPermissions) {
-                 await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
+            // First, try to get basic permissions and enumerate devices
+            console.log('🎥 Starting camera stream...');
+            
+            // Check for basic media support
+            if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+                throw new Error('Media devices not supported by this browser');
             }
+
+            // Get basic permissions first
+            let permissionStream: MediaStream | null = null;
+            try {
+                permissionStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
+                console.log('✅ Got permission stream:', permissionStream);
+                // Stop the permission stream immediately as we'll get a new one with constraints
+                permissionStream.getTracks().forEach(track => track.stop());
+            } catch (permErr) {
+                console.log('⚠️ Basic permission request failed:', permErr);
+                // Continue anyway, might work with specific constraints
+            }
+
             await getDevices();
 
-            // FIX: The spread operator `...` cannot be used on a boolean value (like for 'auto' quality),
-            // which was causing a "Spread types may only be created from object types" error.
-            // This logic now correctly handles both object and boolean types for quality constraints.
+            // Prepare video constraints
             const qualityConstraint = qualityToConstraints[videoQuality];
-            const videoConstraints = selectedVideoDeviceId
-                ? {
-                    deviceId: { exact: selectedVideoDeviceId },
-                    ...(typeof qualityConstraint === 'object' ? qualityConstraint : {}),
-                  }
-                : qualityConstraint;
-            const audioConstraints = selectedAudioDeviceId ? { deviceId: { exact: selectedAudioDeviceId } } : true;
+            let videoConstraints: any = qualityConstraint;
+            
+            if (selectedVideoDeviceId) {
+                if (typeof qualityConstraint === 'object') {
+                    videoConstraints = {
+                        deviceId: { exact: selectedVideoDeviceId },
+                        ...qualityConstraint,
+                    };
+                } else {
+                    videoConstraints = {
+                        deviceId: { exact: selectedVideoDeviceId },
+                    };
+                }
+            }
+
+            const audioConstraints = selectedAudioDeviceId 
+                ? { deviceId: { exact: selectedAudioDeviceId } } 
+                : true;
+
+            console.log('🎬 Requesting media with constraints:', { video: videoConstraints, audio: audioConstraints });
            
             const mediaStream = await navigator.mediaDevices.getUserMedia({
                 video: videoConstraints,
                 audio: audioConstraints,
             });
             
+            console.log('✅ Got media stream:', mediaStream);
+            console.log('Video tracks:', mediaStream.getVideoTracks());
+            console.log('Audio tracks:', mediaStream.getAudioTracks());
+            
             streamRef.current = mediaStream;
             cameraStreamRef.current = mediaStream;
             setStream(mediaStream);
-            setIsCameraOn(mediaStream.getVideoTracks().length > 0 && mediaStream.getVideoTracks()[0].enabled);
-            setIsMicOn(mediaStream.getAudioTracks().length > 0 && mediaStream.getAudioTracks()[0].enabled);
+            
+            const videoTrack = mediaStream.getVideoTracks()[0];
+            const audioTrack = mediaStream.getAudioTracks()[0];
+            
+            setIsCameraOn(!!videoTrack && videoTrack.enabled);
+            setIsMicOn(!!audioTrack && audioTrack.enabled);
+            
+            console.log('🎥 Camera on:', !!videoTrack && videoTrack.enabled);
+            console.log('🎤 Mic on:', !!audioTrack && audioTrack.enabled);
+            
             startLocalAudioMonitor();
 
         } catch (err) {
-            console.error('Error accessing media devices.', err);
+            console.error('❌ Error accessing media devices:', err);
              if (err instanceof DOMException) {
                 if (err.name === 'NotAllowedError') {
                     setError('Permission to use camera and/or microphone was denied. Please enable access in your browser settings.');
                 } else if (err.name === 'NotFoundError') {
                      setError('No camera or microphone found that matches the request. Please connect a device.');
+                } else if (err.name === 'NotReadableError') {
+                    setError('Camera or microphone is already in use by another application.');
                 } else {
                     setError(`An error occurred while accessing media devices: ${err.name}`);
                 }
@@ -127,7 +180,7 @@ export const useCamera = () => {
                  setError('An unknown error occurred while accessing media devices.');
             }
         }
-    }, [getDevices, selectedAudioDeviceId, selectedVideoDeviceId, videoQuality, startLocalAudioMonitor]);
+    }, [getDevices, startLocalAudioMonitor]);
     
     const stopStream = useCallback(() => {
         if (streamRef.current) {

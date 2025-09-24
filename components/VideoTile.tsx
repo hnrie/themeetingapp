@@ -13,9 +13,18 @@ const VideoTile: React.FC<VideoTileProps> = ({ participant }) => {
 
   useEffect(() => {
     if (videoRef.current && stream) {
+      console.log('🎬 VideoTile setting srcObject for', participant.name, stream);
       videoRef.current.srcObject = stream;
+      
+      // Ensure video plays
+      videoRef.current.play().catch(err => {
+        console.log('VideoTile auto-play failed (normal):', err);
+      });
+    } else if (videoRef.current && !stream) {
+      console.log('🚫 VideoTile clearing srcObject for', participant.name);
+      videoRef.current.srcObject = null;
     }
-  }, [stream]);
+  }, [stream, participant.name]);
 
   const showVideo = (participant.isCameraOn || participant.isScreenSharing) && stream;
 

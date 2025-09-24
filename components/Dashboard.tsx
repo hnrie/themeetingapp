@@ -1,6 +1,7 @@
 
 import React, { useState } from 'react';
 import { PlusIcon, ClockIcon } from './icons';
+import CameraDebug from './CameraDebug';
 
 interface DashboardProps {
     onNewMeeting: () => void;
@@ -45,12 +46,7 @@ const Dashboard: React.FC<DashboardProps> = ({ onNewMeeting, onJoinMeeting }) =>
                 </div>
 
                 <div className="bg-zinc-900/50 p-6 rounded-lg border border-zinc-800">
-                    <h2 className="text-xl font-semibold mb-4">Upcoming Today</h2>
-                    <div className="text-center py-8 px-4 border-2 border-dashed border-zinc-700 rounded-lg h-full flex flex-col justify-center">
-                        <ClockIcon size={32} className="mx-auto text-zinc-600 mb-2" />
-                        <p className="text-zinc-500 font-medium">Your scheduled meetings will appear here.</p>
-                        <p className="text-xs text-zinc-600 mt-1">This feature isn't connected to a calendar yet.</p>
-                    </div>
+                    <CameraDebug />
                 </div>
             </main>
         </div>

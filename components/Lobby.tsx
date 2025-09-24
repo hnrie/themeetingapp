@@ -11,6 +11,9 @@ const Lobby: React.FC<LobbyProps> = ({ onJoin }) => {
   const { stream, startStream, stopStream, isCameraOn, isMicOn, toggleCamera, toggleMic, error } = useCamera();
   const videoRef = useRef<HTMLVideoElement>(null);
 
+  // Debug logging
+  console.log('🏛️ Lobby render - stream:', !!stream, 'camera:', isCameraOn, 'mic:', isMicOn, 'error:', error);
+
   useEffect(() => {
     startStream();
     return () => {
@@ -20,7 +23,16 @@ const Lobby: React.FC<LobbyProps> = ({ onJoin }) => {
 
   useEffect(() => {
     if (videoRef.current && stream) {
+      console.log('🎬 Setting video srcObject:', stream);
       videoRef.current.srcObject = stream;
+      
+      // Force video to play if it's not auto-playing
+      videoRef.current.play().catch(err => {
+        console.log('Video auto-play failed (this is normal in some browsers):', err);
+      });
+    } else if (videoRef.current && !stream) {
+      console.log('🚫 No stream, clearing video srcObject');
+      videoRef.current.srcObject = null;
     }
   }, [stream]);
 
