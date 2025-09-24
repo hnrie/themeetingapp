@@ -44,7 +44,7 @@ export class MeetingManager extends EventEmitter {
         this.myId = `id-${Math.random().toString(36).substr(2, 9)}`;
         this.meetingId = meetingId;
 
-        const url = (window as any).__SIGNALING_URL__ || import.meta.env.VITE_SIGNALING_URL || `ws://${location.hostname}:3001/ws`;
+        const url = import.meta.env.VITE_SIGNALING_URL || `ws://${location.hostname}:3001/ws`;
         try {
             this.socket = new WebSocket(url);
             this.socket.onmessage = (ev) => {
@@ -77,8 +77,8 @@ export class MeetingManager extends EventEmitter {
             const { type, payload } = msg;
             const { from, sdp, candidate, name } = payload || {};
 
-            // Ignore messages from ourselves or those not intended for us
-            if (from === this.myId || (to && to !== this.myId)) return;
+            // Ignore messages from ourselves
+            if (from === this.myId) return;
             
             switch (type) {
                 case 'peers':
