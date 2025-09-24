@@ -15,4 +15,6 @@ This repo contains a simple in-browser meeting app.
 
 1. Install dependencies:
    `npm install`
-2. Run the app: `npm run dev`
+2. Start signaling server (new terminal): `npm run signaling`
+3. Run the app: `npm run dev`
+   - Optional: set `VITE_SIGNALING_URL` env to a remote WS, else defaults to `ws://localhost:3001/ws`.

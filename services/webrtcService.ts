@@ -25,7 +25,7 @@ export class MeetingManager extends EventEmitter {
     private meetingId: string;
     private peers: Map<string, { pc: RTCPeerConnection, name: string }> = new Map();
     
-    private channel: BroadcastChannel;
+    private socket: WebSocket | null = null;
 
     private localStream: MediaStream | null = null;
     private currentVideoTrack: MediaStreamTrack | null = null;
@@ -43,30 +43,54 @@ export class MeetingManager extends EventEmitter {
         super();
         this.myId = `id-${Math.random().toString(36).substr(2, 9)}`;
         this.meetingId = meetingId;
-        
-        this.channel = new BroadcastChannel(this.meetingId);
-        this.channel.onmessage = this.handleSignalingMessage.bind(this);
-    }
 
-    private sendSignal(type: string, payload: any) {
-        const message = { type, payload };
-        this.channel.postMessage(message);
-    }
-
-    private async handleSignalingMessage(event: MessageEvent) {
+        const url = (window as any).__SIGNALING_URL__ || import.meta.env.VITE_SIGNALING_URL || `ws://${location.hostname}:3001/ws`;
         try {
-            const { type, payload } = event.data;
-            const { from, to, sdp, candidate, name } = payload;
+            this.socket = new WebSocket(url);
+            this.socket.onmessage = (ev) => {
+                try {
+                    const msg = JSON.parse(String(ev.data));
+                    this.handleSocketMessage(msg);
+                } catch (e) {
+                    console.error('Bad signaling message', e);
+                }
+            };
+            this.socket.onopen = () => {
+                // noop; join will be sent when local stream is set
+            };
+            this.socket.onclose = () => {
+                console.warn('Signaling socket closed');
+            };
+        } catch (e) {
+            console.error('Failed to connect to signaling server', e);
+        }
+    }
+
+    private sendSignal(type: string, payload: any, to?: string) {
+        if (!this.socket || this.socket.readyState !== this.socket.OPEN) return;
+        const message = { type, room: this.meetingId, from: this.myId, to, payload };
+        this.socket.send(JSON.stringify(message));
+    }
+
+    private async handleSocketMessage(msg: any) {
+        try {
+            const { type, payload } = msg;
+            const { from, sdp, candidate, name } = payload || {};
 
             // Ignore messages from ourselves or those not intended for us
             if (from === this.myId || (to && to !== this.myId)) return;
             
             switch (type) {
+                case 'peers':
+                    // Initial peer list on join
+                    (payload.peers || []).forEach((p: any) => {
+                        this.emit('participant-joined', { id: p.id, name: p.name });
+                        this.createPeerConnection(p.id, p.name, true);
+                    });
+                    break;
                 case 'join':
-                    // Received by an existing peer from a new peer.
-                    // Announce the new peer and initiate the connection TO them.
                     this.emit('participant-joined', { id: from, name });
-                    this.createPeerConnection(from, name, true); // Existing peer is the initiator
+                    this.createPeerConnection(from, name, true);
                     break;
                 case 'offer':
                     // Received by a new peer from an existing peer.
@@ -76,7 +100,7 @@ export class MeetingManager extends EventEmitter {
                     await pc.setRemoteDescription(new RTCSessionDescription(sdp));
                     const answer = await pc.createAnswer();
                     await pc.setLocalDescription(answer);
-                    this.sendSignal('answer', { from: this.myId, to: from, sdp: answer });
+                    this.sendSignal('answer', { sdp: answer }, from);
                     break;
                 case 'answer':
                     await this.peers.get(from)?.pc.setRemoteDescription(new RTCSessionDescription(sdp));
@@ -135,7 +159,7 @@ export class MeetingManager extends EventEmitter {
 
         pc.onicecandidate = (event) => {
             if (event.candidate) {
-                this.sendSignal('candidate', { from: this.myId, to: remoteId, candidate: event.candidate });
+                this.sendSignal('candidate', { candidate: event.candidate }, remoteId);
             }
         };
 
@@ -163,7 +187,7 @@ export class MeetingManager extends EventEmitter {
             pc.createOffer()
                 .then(offer => pc.setLocalDescription(offer))
                 .then(() => {
-                    this.sendSignal('offer', { from: this.myId, to: remoteId, name: this.myName, sdp: pc.localDescription });
+                    this.sendSignal('offer', { name: this.myName, sdp: pc.localDescription }, remoteId);
                 });
         }
         
@@ -220,7 +244,14 @@ export class MeetingManager extends EventEmitter {
         this.localStream = stream;
         this.currentVideoTrack = stream.getVideoTracks()[0] || null;
         this.myName = userName;
-        this.sendSignal('join', { from: this.myId, name: userName });
+        // If socket not yet open, wait for connection before sending join
+        const sendJoin = () => this.sendSignal('join', { name: userName });
+        if (this.socket && this.socket.readyState === this.socket.OPEN) {
+            sendJoin();
+        } else if (this.socket) {
+            const onOpen = () => { sendJoin(); this.socket?.removeEventListener('open', onOpen as any); };
+            this.socket.addEventListener('open', onOpen as any);
+        }
     }
 
     public leave() {
@@ -248,10 +279,11 @@ export class MeetingManager extends EventEmitter {
         }
 
         // Close signaling channel
+        // Close signaling socket
         try {
-            // @ts-expect-error allow null assignment for GC in some browsers
-            this.channel.onmessage = null;
-            this.channel.close();
+            if (this.socket && this.socket.readyState === this.socket.OPEN) {
+                this.socket.close();
+            }
         } catch {}
 
         // Release local references
@@ -260,7 +292,7 @@ export class MeetingManager extends EventEmitter {
     }
     
     public toggleTrack(kind: 'video' | 'audio', enabled: boolean) {
-        this.sendSignal('track-toggled', { from: this.myId, kind, enabled });
+        this.sendSignal('track-toggled', { kind, enabled });
     }
 
     public async replaceTrack(track: MediaStreamTrack): Promise<void> {
@@ -283,15 +315,15 @@ export class MeetingManager extends EventEmitter {
     }
     
     public notifyScreenShareStatus(isScreenSharing: boolean) {
-        this.sendSignal('screen-share-status', { from: this.myId, isScreenSharing });
+        this.sendSignal('screen-share-status', { isScreenSharing });
     }
 
     public muteParticipant(participantId: string) {
-        this.sendSignal('force-mute', { from: this.myId, to: participantId });
+        this.sendSignal('force-mute', {}, participantId);
     }
     
     public unmuteParticipant(participantId: string) {
-        this.sendSignal('request-unmute', { from: this.myId, to: participantId });
+        this.sendSignal('request-unmute', {}, participantId);
     }
 
     public sendChatMessage(message: string) {
@@ -302,6 +334,6 @@ export class MeetingManager extends EventEmitter {
             senderName: this.myName,
         };
         this.emit('chat-message', { ...chatMessage, senderId: this.myId });
-        this.sendSignal('chat-message', { ...chatMessage, from: this.myId });
+        this.sendSignal('chat-message', { ...chatMessage });
     }
 }
