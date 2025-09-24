@@ -224,9 +224,39 @@ export class MeetingManager extends EventEmitter {
     }
 
     public leave() {
-        this.sendSignal('leave', { from: this.myId });
+        try {
+            this.sendSignal('leave', { from: this.myId });
+        } catch {}
+
+        // Close all peer connections and clear speaking monitors
         this.peers.forEach((_, id) => this.closePeerConnection(id));
-        this.channel.close();
+
+        // Clear any remaining analyser intervals
+        this.analysers.forEach(({ intervalId }) => {
+            clearInterval(intervalId);
+        });
+        this.analysers.clear();
+
+        // Close shared AudioContext used for remote audio monitors
+        if (this.audioContext) {
+            try {
+                this.audioContext.close();
+            } catch (e) {
+                console.warn('Failed to close AudioContext on leave:', e);
+            }
+            this.audioContext = null;
+        }
+
+        // Close signaling channel
+        try {
+            // @ts-expect-error allow null assignment for GC in some browsers
+            this.channel.onmessage = null;
+            this.channel.close();
+        } catch {}
+
+        // Release local references
+        this.localStream = null;
+        this.currentVideoTrack = null;
     }
     
     public toggleTrack(kind: 'video' | 'audio', enabled: boolean) {

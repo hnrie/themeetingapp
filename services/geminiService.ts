@@ -10,6 +10,28 @@ const getGeminiClient = () => {
     return new GoogleGenAI({ apiKey });
 };
 
+function stripCodeFences(text: string): string {
+    // Removes common markdown json code fences and trims
+    const fenced = text.replace(/^```(?:json)?\n|\n```$/g, '');
+    // Also try a broader removal if model returned extra prose
+    const firstBrace = fenced.indexOf('{');
+    const lastBrace = fenced.lastIndexOf('}');
+    if (firstBrace !== -1 && lastBrace !== -1 && lastBrace > firstBrace) {
+        return fenced.slice(firstBrace, lastBrace + 1).trim();
+    }
+    return fenced.trim();
+}
+
+function isMeetingSummary(obj: unknown): obj is MeetingSummary {
+    if (!obj || typeof obj !== 'object') return false;
+    const anyObj = obj as any;
+    return typeof anyObj.title === 'string'
+        && typeof anyObj.summary === 'string'
+        && Array.isArray(anyObj.keyPoints)
+        && Array.isArray(anyObj.actionItems)
+        && anyObj.actionItems.every((it: any) => it && typeof it.owner === 'string' && typeof it.task === 'string');
+}
+
 export const getMeetingSummary = async (transcript: string): Promise<MeetingSummary> => {
     try {
         const ai = getGeminiClient();
@@ -54,9 +76,13 @@ ${transcript}
             },
         });
 
-        const jsonText = response.text.trim();
-        const parsedJson = JSON.parse(jsonText);
-        return parsedJson as MeetingSummary;
+        const rawText = response.text.trim();
+        const jsonText = stripCodeFences(rawText);
+        const parsed = JSON.parse(jsonText);
+        if (!isMeetingSummary(parsed)) {
+            throw new Error('Model returned unexpected JSON format.');
+        }
+        return parsed;
 
     } catch (error) {
         console.error("Error generating meeting summary:", error);
