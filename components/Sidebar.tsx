@@ -1,7 +1,6 @@
 import React, { useState } from 'react';
-import { ChatIcon, AssistantIcon, UsersIcon } from './icons';
+import { ChatIcon, UsersIcon } from './icons';
 import ChatPanel from './ChatPanel';
-import AssistantPanel from './AssistantPanel';
 import ParticipantsPanel from './ParticipantsPanel';
 import type { ChatMessage, Participant } from '../types';
 
@@ -18,7 +17,7 @@ interface SidebarProps {
   hostId: string | null;
 }
 
-type ActiveTab = 'chat' | 'assistant' | 'participants';
+type ActiveTab = 'chat' | 'participants';
 
 const Sidebar: React.FC<SidebarProps> = ({ isOpen, localUserName, localParticipantId, messages, onSendMessage, participants, isHost, onMuteParticipant, onUnmuteParticipant, hostId }) => {
   const [activeTab, setActiveTab] = useState<ActiveTab>('chat');
@@ -50,9 +49,6 @@ const Sidebar: React.FC<SidebarProps> = ({ isOpen, localUserName, localParticipa
             <TabButton tabName="participants">
                 <UsersIcon size={18} /> Participants ({participants.length})
             </TabButton>
-            <TabButton tabName="assistant">
-              <AssistantIcon size={18} /> Assistant
-            </TabButton>
           </nav>
         </div>
         <div className="flex-1 overflow-y-auto">
@@ -73,7 +69,7 @@ const Sidebar: React.FC<SidebarProps> = ({ isOpen, localUserName, localParticipa
                 hostId={hostId}
               />
           )}
-          {activeTab === 'assistant' && <AssistantPanel />}
+          {/* Assistant panel removed */}
         </div>
       </div>
     </aside>

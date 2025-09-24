@@ -52,14 +52,7 @@ export const ChatIcon: React.FC<IconProps> = ({ size = 24, ...props }) => (
     </svg>
 );
 
-export const AssistantIcon: React.FC<IconProps> = ({ size = 24, ...props }) => (
-    <svg xmlns="http://www.w3.org/2000/svg" width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" {...props}>
-        <path d="M12 8V4H8" />
-        <rect x="4" y="12" width="16" height="8" rx="2" />
-        <path d="M4 12v-2a2 2 0 0 1 2-2h4" />
-        <path d="m18 12 2-2-2-2" />
-    </svg>
-);
+// Assistant icon removed
 
 export const SendIcon: React.FC<IconProps> = ({ size = 24, ...props }) => (
     <svg xmlns="http://www.w3.org/2000/svg" width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" {...props}>
