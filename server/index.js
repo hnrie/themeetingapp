@@ -52,7 +52,7 @@ wss.on('connection', (ws) => {
             }
             ws.send(JSON.stringify({ type: 'peers', payload: { peers } }));
 
-            // Broadcast to others that a participant joined
+            // Broadcast to others that a participant joined (they will initiate)
             broadcast(room, { type: 'join', payload: { from, name: meta.name } }, ws);
             return;
         }

@@ -82,10 +82,10 @@ export class MeetingManager extends EventEmitter {
             
             switch (type) {
                 case 'peers':
-                    // Initial peer list on join
+                    // Initial peer list on join. Do NOT initiate offers here to avoid glare.
                     (payload.peers || []).forEach((p: any) => {
                         this.emit('participant-joined', { id: p.id, name: p.name });
-                        this.createPeerConnection(p.id, p.name, true);
+                        this.createPeerConnection(p.id, p.name, false);
                     });
                     break;
                 case 'join':
