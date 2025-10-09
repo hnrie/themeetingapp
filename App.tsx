@@ -36,8 +36,12 @@ const App: React.FC = () => {
   }, []);
   
   const handleJoinMeetingById = useCallback((id: string) => {
-      if(id.trim()){
-          window.location.hash = id.trim();
+      const trimmedId = id.trim();
+      if (trimmedId) {
+        const meetingId = trimmedId.includes('#')
+          ? trimmedId.substring(trimmedId.lastIndexOf('#') + 1)
+          : trimmedId;
+        window.location.hash = meetingId;
       }
   }, []);
 
