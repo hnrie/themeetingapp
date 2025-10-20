@@ -124,7 +124,7 @@ export class MeetingManager extends EventEmitter {
                      this.emit('chat-message', {
                          id: payload.id,
                          senderId: from,
-                         senderName: this.peers.get(from)?.name || payload.senderName,
+                         senderName: payload.senderName || this.peers.get(from)?.name,
                          message: payload.message,
                          timestamp: payload.timestamp
                      });

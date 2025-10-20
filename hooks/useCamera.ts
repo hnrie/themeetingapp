@@ -203,7 +203,11 @@ export const useCamera = () => {
     }, [stopLocalAudioMonitor]);
 
     const toggleCamera = useCallback(() => {
-        if (cameraStreamRef.current && !isScreenSharing) {
+        if (isScreenSharing) {
+            setError("Cannot toggle camera while screen sharing.");
+            return;
+        }
+        if (cameraStreamRef.current) {
             const videoTrack = cameraStreamRef.current.getVideoTracks()[0];
             if (videoTrack) {
                 videoTrack.enabled = !videoTrack.enabled;

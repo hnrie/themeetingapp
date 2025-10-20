@@ -44,6 +44,7 @@ const ControlBar: React.FC<ControlBarProps> = ({
       <ControlButton
         onClick={onToggleMic}
         className={isMicOn ? 'bg-zinc-700 hover:bg-zinc-600' : 'bg-brand-danger hover:bg-red-500'}
+        aria-label={isMicOn ? 'Mute microphone' : 'Unmute microphone'}
       >
         {isMicOn ? <MicrophoneOnIcon /> : <MicrophoneOffIcon />}
       </ControlButton>
@@ -51,6 +52,7 @@ const ControlBar: React.FC<ControlBarProps> = ({
       <ControlButton
         onClick={onToggleCamera}
         className={isCameraOn ? 'bg-zinc-700 hover:bg-zinc-600' : 'bg-brand-danger hover:bg-red-500'}
+        aria-label={isCameraOn ? 'Turn off camera' : 'Turn on camera'}
       >
         {isCameraOn ? <CameraOnIcon /> : <CameraOffIcon />}
       </ControlButton>
@@ -58,6 +60,7 @@ const ControlBar: React.FC<ControlBarProps> = ({
       <ControlButton
         onClick={onToggleScreenShare}
         className={isScreenSharing ? 'bg-brand-primary text-white' : 'bg-zinc-700 hover:bg-zinc-600'}
+        aria-label={isScreenSharing ? 'Stop sharing screen' : 'Share screen'}
       >
         {isScreenSharing ? <ScreenShareOffIcon /> : <ScreenShareOnIcon />}
       </ControlButton>
@@ -65,6 +68,7 @@ const ControlBar: React.FC<ControlBarProps> = ({
       <ControlButton
         onClick={onLeave}
         className="bg-brand-danger hover:bg-red-500 px-6"
+        aria-label="Leave meeting"
       >
         <EndCallIcon />
       </ControlButton>

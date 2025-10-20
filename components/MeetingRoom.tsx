@@ -128,11 +128,13 @@ const MeetingRoom: React.FC<MeetingRoomProps> = ({ meetingId, userName, onLeave 
   const handleToggleCamera = () => {
       media.toggleCamera();
       meetingManagerRef.current?.toggleTrack('video', !media.isCameraOn);
+      setParticipants(prev => prev.map(p => p.isLocal ? { ...p, isCameraOn: !media.isCameraOn } : p));
   };
   
   const handleToggleMic = () => {
       media.toggleMic();
       meetingManagerRef.current?.toggleTrack('audio', !media.isMicOn);
+      setParticipants(prev => prev.map(p => p.isLocal ? { ...p, isMicOn: !media.isMicOn } : p));
   };
   
   const handleToggleScreenShare = async () => {
@@ -218,7 +220,7 @@ const MeetingRoom: React.FC<MeetingRoomProps> = ({ meetingId, userName, onLeave 
   }
 
   return (
-    <div className="w-full h-full flex flex-col bg-zinc-900">
+    <div className="w-full h-full flex flex-col bg-zinc-900" data-testid="meeting-room">
       {notification && <Notification message={notification} onClose={() => setNotification(null)} />}
       <main className="relative flex-1 flex overflow-hidden">
         <MeetingIdDisplay meetingId={meetingId} />
