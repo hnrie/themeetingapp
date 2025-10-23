@@ -209,48 +209,47 @@ const MeetingRoom: React.FC<MeetingRoomProps> = ({ meetingId, userName, onLeave 
   const screenSharer = useMemo(() => participants.find(p => p.isScreenSharing), [participants]);
   const otherParticipants = useMemo(() => participants.filter(p => p.id !== screenSharer?.id), [participants, screenSharer]);
 
-  const getGridCols = (count: number) => {
-    if (count <= 1) return 'grid-cols-1';
-    if (count <= 2) return 'grid-cols-1 md:grid-cols-2';
-    if (count <= 4) return 'grid-cols-2';
-    if (count <= 9) return 'grid-cols-3';
-    return 'grid-cols-4';
-  }
+  const getGridClass = (count: number) => {
+      if (count <= 1) return 'grid-cols-1 grid-rows-1';
+      if (count === 2) return 'grid-cols-1 sm:grid-cols-2 grid-rows-2 sm:grid-rows-1';
+      if (count >= 3 && count <= 4) return 'grid-cols-2 grid-rows-2';
+      if (count >= 5 && count <= 6) return 'grid-cols-3 grid-rows-2';
+      if (count >= 7 && count <= 9) return 'grid-cols-3 grid-rows-3';
+      return 'grid-cols-4 grid-rows-4';
+  };
 
   return (
-    <div className="w-full h-full flex flex-col bg-zinc-900">
+    <div className="w-full h-full flex flex-col bg-zinc-900 text-white">
       {notification && <Notification message={notification} onClose={() => setNotification(null)} />}
       <main className="relative flex-1 flex overflow-hidden">
         <MeetingIdDisplay meetingId={meetingId} />
-        <div className="flex-1 transition-all duration-300 p-4 flex justify-center items-center">
-          <div className="w-full h-full max-w-7xl">
+
+        {/* Main Content */}
+        <div className="flex-1 flex flex-col transition-all duration-300 p-2 sm:p-4">
             {screenSharer ? (
-              <div className="flex w-full h-full gap-4">
-                <div className="flex-1 h-full">
+              <div className="flex-1 grid grid-cols-1 lg:grid-cols-4 gap-4">
+                <div className="lg:col-span-3 w-full h-full rounded-2xl overflow-hidden">
                   <VideoTile participant={screenSharer} />
                 </div>
-                {otherParticipants.length > 0 && (
-                  <div className="w-48 flex-shrink-0 flex flex-col gap-4 overflow-y-auto">
-                    {otherParticipants.map(p => (
-                      <div key={p.id} className="w-full aspect-video rounded-lg overflow-hidden">
-                        <VideoTile participant={p} />
-                      </div>
-                    ))}
-                  </div>
-                )}
+                <div className="hidden lg:flex lg:flex-col gap-4 overflow-y-auto">
+                  {otherParticipants.map(p => (
+                    <div key={p.id} className="w-full aspect-video rounded-xl overflow-hidden">
+                      <VideoTile participant={p} isThumbnail />
+                    </div>
+                  ))}
+                </div>
               </div>
             ) : (
-              <div className={`grid ${getGridCols(participants.length)} gap-4 w-full h-full`}>
+               <div className={`flex-1 grid ${getGridClass(participants.length)} gap-4 place-items-center`}>
                 {participants.map(participant => (
                   <VideoTile key={participant.id} participant={participant} />
                 ))}
               </div>
             )}
-          </div>
         </div>
 
         {showUnmuteRequest && (
-            <div className="absolute inset-0 bg-black/60 flex items-center justify-center z-50">
+            <div className="absolute inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center z-50">
                 <div className="bg-zinc-800 p-6 rounded-lg shadow-xl text-center max-w-sm mx-4">
                     <h3 className="font-bold text-lg mb-2">The host would like you to unmute</h3>
                     <p className="text-zinc-400 text-sm mb-6">Do you want to unmute your microphone?</p>
