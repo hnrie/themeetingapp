@@ -1,36 +1,31 @@
 import React, { useRef, useEffect } from 'react';
 import type { Participant } from '../types';
-import { MicrophoneOffIcon } from './icons';
+import { MicrophoneOffIcon, ScreenShareIcon } from './icons';
 import Avatar from './Avatar';
 
 interface VideoTileProps {
   participant: Participant;
+  isThumbnail?: boolean;
 }
 
-const VideoTile: React.FC<VideoTileProps> = ({ participant }) => {
+const VideoTile: React.FC<VideoTileProps> = ({ participant, isThumbnail = false }) => {
   const videoRef = useRef<HTMLVideoElement>(null);
   const { stream } = participant;
 
   useEffect(() => {
     if (videoRef.current && stream) {
-      console.log('🎬 VideoTile setting srcObject for', participant.name, stream);
       videoRef.current.srcObject = stream;
-      
-      // Ensure video plays
       videoRef.current.play().catch(err => {
-        console.log('VideoTile auto-play failed (normal):', err);
+        // Autoplay failure is common and expected, so we can ignore the error
       });
-    } else if (videoRef.current && !stream) {
-      console.log('🚫 VideoTile clearing srcObject for', participant.name);
-      videoRef.current.srcObject = null;
     }
-  }, [stream, participant.name]);
+  }, [stream]);
 
   const showVideo = (participant.isCameraOn || participant.isScreenSharing) && stream;
 
   return (
-    <div className={`relative w-full h-full bg-zinc-800 rounded-lg overflow-hidden shadow-lg flex items-center justify-center transition-all duration-300
-      ${participant.isSpeaking ? 'ring-4 ring-brand-secondary animate-pulse' : 'ring-0 ring-transparent'}
+    <div className={`relative w-full h-full bg-zinc-800 rounded-xl overflow-hidden shadow-lg flex items-center justify-center transition-all duration-300
+      ${participant.isSpeaking && !isThumbnail ? 'ring-4 ring-brand-secondary' : 'ring-0 ring-transparent'}
     `}>
       {showVideo ? (
         <video 
@@ -41,16 +36,23 @@ const VideoTile: React.FC<VideoTileProps> = ({ participant }) => {
           className="w-full h-full object-cover"
         />
       ) : (
-        <div className="flex flex-col items-center justify-center text-zinc-400 gap-4">
-            <Avatar name={participant.name} size={96} />
-            <p>{participant.name}</p>
+        <div className={`flex flex-col items-center justify-center text-zinc-400 gap-${isThumbnail ? '2' : '4'}`}>
+            <Avatar name={participant.name} size={isThumbnail ? 48 : 96} />
+            {!isThumbnail && <p>{participant.name}</p>}
         </div>
       )}
       
-      <div className="absolute bottom-2 left-2 bg-black/50 backdrop-blur-sm text-white text-sm px-2 py-1 rounded-md flex items-center gap-2">
-        {!participant.isMicOn && <MicrophoneOffIcon size={16} className="text-brand-danger" />}
-        <span>{participant.name}{participant.isLocal && ' (You)'}{participant.isScreenSharing && ' (Presenting)'}</span>
+      <div className={`absolute bottom-2 left-2 bg-black/50 backdrop-blur-sm text-white px-2 py-1 rounded-md flex items-center gap-2 ${isThumbnail ? 'text-xs' : 'text-sm'}`}>
+        {!participant.isMicOn && <MicrophoneOffIcon size={isThumbnail ? 12 : 16} className="text-brand-danger" />}
+        <span>{participant.name}{participant.isLocal && !isThumbnail && ' (You)'}</span>
       </div>
+
+      {participant.isScreenSharing && !isThumbnail && (
+        <div className="absolute top-2 right-2 bg-black/50 backdrop-blur-sm text-white text-xs px-2 py-1 rounded-md flex items-center gap-1">
+          <ScreenShareIcon size={14} />
+          <span>Presenting</span>
+        </div>
+      )}
     </div>
   );
 };

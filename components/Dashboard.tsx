@@ -1,7 +1,6 @@
 
 import React, { useState } from 'react';
-import { PlusIcon, ClockIcon } from './icons';
-import CameraDebug from './CameraDebug';
+import { PlusIcon, VideoCameraIcon } from './icons';
 
 interface DashboardProps {
     onNewMeeting: () => void;
@@ -10,43 +9,58 @@ interface DashboardProps {
 
 const Dashboard: React.FC<DashboardProps> = ({ onNewMeeting, onJoinMeeting }) => {
     const [meetingCode, setMeetingCode] = useState('');
+
+    const handleJoin = (e: React.FormEvent) => {
+        e.preventDefault();
+        if (meetingCode.trim()) {
+            onJoinMeeting(meetingCode);
+        }
+    };
     
     return (
-        <div className="flex flex-col items-center justify-center h-full p-4 md:p-8">
-            <header className="w-full max-w-5xl mb-8 md:mb-12">
-                <h1 className="text-3xl md:text-4xl font-bold text-white">Gemini Meet</h1>
-                <p className="text-zinc-400">Your intelligent meeting space</p>
-            </header>
-            
-            <main className="w-full max-w-5xl grid grid-cols-1 md:grid-cols-2 gap-8">
+        <div className="relative flex flex-col items-center justify-center h-full p-4 md:p-8 overflow-hidden">
+            {/* Background decorative element */}
+            <div className="absolute top-0 left-0 -translate-x-1/4 -translate-y-1/4 w-96 h-96 bg-brand-primary/20 rounded-full blur-3xl" />
+            <div className="absolute bottom-0 right-0 translate-x-1/4 translate-y-1/4 w-96 h-96 bg-brand-secondary/20 rounded-full blur-3xl" />
+
+            <main className="w-full max-w-md bg-zinc-900/50 backdrop-blur-sm p-8 rounded-2xl shadow-2xl border border-zinc-800/50">
+                <header className="text-center mb-8">
+                    <h1 className="text-4xl md:text-5xl font-bold text-white">Gemini Meet</h1>
+                    <p className="text-zinc-400 mt-2">Your intelligent meeting space</p>
+                </header>
+
                 <div className="flex flex-col gap-4">
                     <button 
                         onClick={onNewMeeting}
-                        className="flex items-center justify-center gap-2 w-full bg-brand-primary text-white font-semibold py-3 px-6 rounded-lg hover:bg-blue-500 transition-colors shadow-lg"
+                        className="flex items-center justify-center gap-3 w-full bg-brand-primary text-white font-bold py-4 px-6 rounded-xl hover:bg-blue-500 transition-transform hover:scale-105 shadow-lg focus:outline-none focus:ring-4 focus:ring-brand-primary/50"
                     >
-                        <PlusIcon size={20} />
-                        <span>New Meeting</span>
+                        <PlusIcon size={22} />
+                        <span className="text-lg">New Meeting</span>
                     </button>
-                    <div className="flex gap-2">
+
+                    <div className="flex items-center gap-2">
+                        <hr className="w-full border-zinc-700" />
+                        <span className="text-zinc-500 text-xs font-semibold">OR</span>
+                        <hr className="w-full border-zinc-700" />
+                    </div>
+
+                    <form onSubmit={handleJoin} className="flex flex-col sm:flex-row gap-3">
                         <input
                           type="text"
                           placeholder="Enter a code or link"
                           value={meetingCode}
                           onChange={(e) => setMeetingCode(e.target.value)}
-                          className="flex-grow bg-zinc-800 border border-zinc-700 rounded-lg px-4 py-3 text-white placeholder-zinc-500 focus:outline-none focus:ring-2 focus:ring-brand-primary"
+                          className="flex-grow bg-zinc-800 border-2 border-zinc-700 rounded-xl px-4 py-3 text-white placeholder-zinc-500 focus:outline-none focus:ring-2 focus:ring-brand-primary focus:border-transparent transition-all"
                         />
                         <button
-                          onClick={() => onJoinMeeting(meetingCode)}
+                          type="submit"
                           disabled={!meetingCode.trim()}
-                          className="bg-zinc-700 text-white font-semibold py-3 px-6 rounded-lg disabled:opacity-50 disabled:cursor-not-allowed hover:bg-zinc-600 transition-colors"
+                          className="flex items-center justify-center gap-2 bg-zinc-700 text-white font-semibold py-3 px-6 rounded-xl disabled:opacity-50 disabled:cursor-not-allowed hover:bg-zinc-600 transition-colors focus:outline-none focus:ring-4 focus:ring-zinc-600/50"
                         >
-                          Join
+                          <VideoCameraIcon size={20}/>
+                          <span>Join</span>
                         </button>
-                    </div>
-                </div>
-
-                <div className="bg-zinc-900/50 p-6 rounded-lg border border-zinc-800">
-                    <CameraDebug />
+                    </form>
                 </div>
             </main>
         </div>
